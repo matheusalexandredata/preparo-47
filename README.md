@@ -12,6 +12,6 @@ A correção usa o gabarito vinculado. O banco local reúne um registro por grup
 
 ## GitHub Pages
 
-A pasta `docs/` está preparada para publicação estática. O gerador também exporta `banco.json`, na pasta do repositório. Os dois formatos do banco ficam no `.gitignore`. Uma instalação sem o banco embutido aceita o JSON pelo menu lateral. Cada item tem `id`, `tags` (uma lista de 1 a 4 níveis), `stem`, `choices` (quatro textos), `answer` (A–D), `status` (`confirmada` ou `preliminar`) e `source` (URL do gabarito). `explanation` é opcional.
+A publicação usa `main` e a pasta `docs/`. O site carrega `docs/banco.js` automaticamente. O gerador também exporta `banco.json`, que pode ser importado pelo menu lateral. Cada item tem `id`, `tags` (uma lista de 1 a 4 níveis), `stem`, `choices` (quatro textos), `answer` (A–D), `status` (`confirmada` ou `preliminar`) e `source` (URL do gabarito). `explanation` é opcional.
 
-O repositório foi preparado para uso local. As diretivas de indexação pedem que buscadores não indexem o site. O acesso a uma publicação pública continua disponível para quem tiver o endereço.
+O site e o banco publicado são acessíveis sem login. O site pede aos buscadores que não o indexem.
