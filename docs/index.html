@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Caderno de prática</title>
+<link rel="stylesheet" href="./style.css">
+<script defer src="./banco.js"></script>
+<script defer src="./motor.js"></script>
+<script defer src="./app.js"></script>
+</head>
+<body>
+<div class="layout">
+<aside>
+  <div class="brand"><span>§</span><div>Caderno de prática<small>1ª fase · OAB</small></div></div>
+  <nav aria-label="Seções">
+    <button data-tab="build">Montar prova</button>
+    <button data-tab="quiz">Minha prova</button>
+    <button data-tab="history">Histórico e revisão</button>
+  </nav>
+  <label class="import">Importar banco JSON<input id="import" type="file" accept=".json,application/json"></label>
+</aside>
+<main id="main"></main>
+</div>
+<div id="notice" role="status" aria-live="polite"></div>
+</body>
+</html>
