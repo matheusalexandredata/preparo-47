@@ -1,0 +1,25 @@
+{
+  "versao": 1,
+  "quantidade": 20,
+  "incluir_preliminares": true,
+  "temas": [
+    {
+      "nome": "Direito Penal",
+      "peso": 3,
+      "filhos": [
+        {
+          "nome": "Crimes contra a pessoa",
+          "peso": 2
+        },
+        {
+          "nome": "Teoria do crime",
+          "peso": 1
+        }
+      ]
+    },
+    {
+      "nome": "Ética profissional e Estatuto da OAB",
+      "peso": 1
+    }
+  ]
+}
