@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Guia JSON para IAs | Estudos da Gabia</title>
+  <link rel="stylesheet" href="./style.css?v=4">
+</head>
+<body>
+  <main class="guide">
+    <a href="./index.html">Voltar para Montar prova</a>
+    <header>
+      <h1>Guia JSON para IAs</h1>
+      <p class="description">Use este formato para preparar uma prova com os temas e as quantidades que a pessoa pediu.</p>
+    </header>
+    <section class="card">
+      <h2>Consulte os temas e gere a configuração</h2>
+      <ol>
+        <li>Leia o <a href="./temas.json">catálogo de temas em JSON</a>. Ele lista os nomes exatos e o número de questões definitivas e preliminares por ramo.</li>
+        <li>Mapeie os pedidos da pessoa para os nomes do catálogo, respeitando o caminho completo. Se houver dúvida sobre o tema, peça esclarecimento antes de escolher.</li>
+        <li>Estime quantas questões entram em cada ramo e confira se há questões suficientes. Por padrão, some <code>definitivas</code> e <code>preliminares</code>. Se a pessoa pedir só gabaritos definitivos, use apenas a contagem de <code>definitivas</code>.</li>
+        <li>Entregue um único arquivo UTF-8 com a extensão <code>.json</code>. Em <strong>Montar prova</strong>, a pessoa escolhe <strong>Importar configuração JSON</strong> e confere o resumo.</li>
+      </ol>
+    </section>
+    <section class="card">
+      <h2>Campos da configuração</h2>
+      <ul>
+        <li><code>versao</code> deve ser <code>1</code>.</li>
+        <li><code>quantidade</code> é um inteiro de 1 a 200.</li>
+        <li><code>incluir_preliminares</code> é opcional e aceita <code>true</code> ou <code>false</code>. O padrão é <code>true</code>.</li>
+        <li><code>temas</code> é uma lista de matérias. Use <code>[]</code> para uma prova mista.</li>
+        <li>Cada item tem <code>nome</code>, copiado do catálogo, e <code>peso</code>, um número a partir de zero. Se omitido, o peso é <code>1</code>. Use zero para excluir um tema. Cada grupo que recebe questões precisa de pelo menos um peso positivo.</li>
+        <li><code>filhos</code> é opcional e contém a lista de assuntos, subtópicos ou detalhes do item pai. Use a mesma estrutura em todos os níveis. Uma lista vazia usa todas as questões do tema.</li>
+      </ul>
+      <p>Use até quatro níveis, com nomes distintos em cada grupo. Os campos acima bastam para gerar a configuração. O banco fornece enunciados, alternativas e gabaritos.</p>
+    </section>
+    <section class="card">
+      <h2>Como distribuir as questões</h2>
+      <p>Em cada grupo, divida o peso do tema pela soma dos pesos e multiplique pelo número de questões reservado ao grupo. Arredonde para baixo e distribua as sobras aos maiores restos fracionários. Em empate, vale a ordem do arquivo. Repita a conta dentro de cada tema que tenha filhos.</p>
+      <p>Se a pessoa pedir quantidades exatas, use essas quantidades como pesos e faça a soma dos pesos coincidir com o total daquele grupo. O exemplo abaixo gera 15 de Penal e 5 de Ética. Dentro das 15 de Penal, são 10 de Crimes contra a pessoa e 5 de Teoria do crime.</p>
+      <p><a href="./exemplo-prova.json" download>Baixar o exemplo em JSON</a></p>
+      <pre><code>{
+  "versao": 1,
+  "quantidade": 20,
+  "incluir_preliminares": true,
+  "temas": [
+    {
+      "nome": "Direito Penal",
+      "peso": 3,
+      "filhos": [
+        { "nome": "Crimes contra a pessoa", "peso": 2 },
+        { "nome": "Teoria do crime", "peso": 1 }
+      ]
+    },
+    { "nome": "Ética profissional e Estatuto da OAB", "peso": 1 }
+  ]
+}</code></pre>
+    </section>
+  </main>
+</body>
+</html>

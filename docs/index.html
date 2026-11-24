@@ -1,28 +1,50 @@
 <!doctype html>
 <html lang="pt-BR">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="robots" content="noindex, nofollow">
-<title>Caderno de prática</title>
-<link rel="stylesheet" href="./style.css">
-<script defer src="./banco.js"></script>
-<script defer src="./motor.js"></script>
-<script defer src="./app.js"></script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#E9BFC1">
+  <title>Estudos da Gabia</title>
+  <link rel="stylesheet" href="./style.css?v=4">
+  <script defer src="./banco.js"></script>
+  <script defer src="./motor.js?v=4"></script>
+  <script defer src="./app.js?v=4"></script>
 </head>
 <body>
-<div class="layout">
-<aside>
-  <div class="brand"><span>§</span><div>Caderno de prática<small>1ª fase · OAB</small></div></div>
-  <nav aria-label="Seções">
-    <button data-tab="build">Montar prova</button>
-    <button data-tab="quiz">Minha prova</button>
-    <button data-tab="history">Histórico e revisão</button>
-  </nav>
-  <label class="import">Importar banco JSON<input id="import" type="file" accept=".json,application/json"></label>
-</aside>
-<main id="main"></main>
-</div>
-<div id="notice" role="status" aria-live="polite"></div>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="brand-name">Estudos da Gabia</span>
+        <small>1ª fase da OAB</small>
+      </div>
+      <nav aria-label="Seções">
+        <button type="button" data-tab="build" aria-current="page">Montar prova</button>
+        <button type="button" data-tab="quiz">Minha prova</button>
+        <button type="button" data-tab="history">Histórico e revisão</button>
+      </nav>
+      <a class="guide-link" href="./guia-json.html">Guia JSON para IAs</a>
+    </aside>
+    <div class="workspace">
+      <div id="notice" class="notice" role="status" hidden></div>
+      <main id="main">
+        <header class="page-header"><h1>Montar prova</h1></header>
+        <p class="muted">Carregando as questões…</p>
+        <noscript><p>Ative o JavaScript do navegador para usar o simulador.</p></noscript>
+      </main>
+    </div>
+    <input id="config-file" type="file" accept=".json,application/json" hidden>
+  </div>
+  <dialog id="confirmacao" aria-labelledby="confirmacao-titulo" aria-describedby="confirmacao-texto">
+    <form method="dialog">
+      <h2 id="confirmacao-titulo"></h2>
+      <p id="confirmacao-texto">As respostas já confirmadas ficam no histórico.</p>
+      <div class="actions">
+        <button type="submit" class="button" value="cancelar" autofocus>Cancelar</button>
+        <button type="submit" class="button primary" value="confirmar" id="confirmacao-acao"></button>
+      </div>
+    </form>
+  </dialog>
+  <div id="printout"></div>
 </body>
 </html>
