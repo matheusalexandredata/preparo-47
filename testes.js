@@ -4,7 +4,7 @@ const assert = require("node:assert/strict");
 const { test } = require("node:test");
 const fs = require("node:fs");
 const path = require("node:path");
-const { distribuir, planejar, montar, lerConfiguracao, formatarTexto } = require("./docs/motor.js");
+const { distribuir, planejar, montar, lerConfiguracao, formatarTexto, textoDaAlternativa, recuperarRespostas } = require("./docs/motor.js");
 
 test("divisão de questões e desempate determinístico", () => {
     assert.deepEqual(distribuir(20, [3, 1]), [15, 5]);
@@ -45,6 +45,20 @@ test("texto corrido elimina quebras do PDF e preserva listas e parágrafos", () 
         "Leia:\nI. Primeiro item.\nII – Segundo item.\n\nAssinale a correta.");
 });
 
+test("remove o rodapé na alternativa D e preserva números do enunciado", () => {
+    assert.equal(textoDaAlternativa("Destituição do poder familiar.\n13", 3), "Destituição do poder familiar.");
+    assert.equal(textoDaAlternativa("Aplica-se o art.\n13", 3), "Aplica-se o art. 13");
+    assert.equal(textoDaAlternativa("Resultado.\n13", 2), "Resultado. 13");
+});
+
+test("recupera a sessão antiga sem atribuir uma letra desconhecida", () => {
+    const prova = { ids: ["a", "b"], position: 1, done: true, selected: "B" };
+    const historico = [{ id: "z", correct: true }, { id: "a", correct: false }, { id: "b", correct: true }];
+    assert.deepEqual(recuperarRespostas(prova, historico), [
+        { choice: null, correct: false }, { choice: "B", correct: true }
+    ]);
+});
+
 const origem = path.join(__dirname, "docs/banco.js");
 test("o guia, as cotas e a formatação conferem com o banco local", { skip: !fs.existsSync(origem) }, () => {
     require(origem);
@@ -71,4 +85,6 @@ test("o guia, as cotas e a formatação conferem com o banco local", { skip: !fs
     const pedro = banco.find(q => q.id === "43/caderno-de-prova-tipo-1/005");
     assert.ok(pedro);
     assert.doesNotMatch(formatarTexto(pedro.choices[2]), /\n/);
+    const angelica = banco.find(q => q.id === "25/caderno-de-prova-tipo-1/043");
+    assert.match(textoDaAlternativa(angelica.choices[3], 3), /mãe Teresa\.$/);
 });

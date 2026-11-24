@@ -143,5 +143,28 @@ function formatarTexto(texto) {
     return frases.join("");
 }
 
+function textoDaAlternativa(texto, posicao) {
+    // Cadernos antigos podem trazer o número da página em uma linha após a alternativa D.
+    if (posicao === 3) {
+        const rodape = texto.match(/^(.*[.!?])[ \t]*\r?\n\s*(\d{1,2})[ \t]*$/s);
+        if (rodape && Number(rodape[2]) >= 1 && Number(rodape[2]) <= 40 &&
+            !/\b(?:art|inc|fl|pág|n)\.$/i.test(rodape[1])) texto = rodape[1];
+    }
+    return formatarTexto(texto);
+}
+
+function recuperarRespostas(prova, historico) {
+    const quantidade = prova.position + Number(prova.done);
+    if (!quantidade) return [];
+    const recentes = historico.slice(-quantidade);
+    return Array.from({ length: quantidade }, (_, i) => {
+        const registro = recentes.length === quantidade && recentes[i].id === prova.ids[i] ? recentes[i] : null;
+        return registro ? {
+            choice: registro.choice ?? (prova.done && i === prova.position ? prova.selected : null),
+            correct: registro.correct
+        } : null;
+    });
+}
+
 if (typeof module === "object")
-    module.exports = { distribuir, planejar, montar, lerConfiguracao, formatarTexto };
+    module.exports = { distribuir, planejar, montar, lerConfiguracao, formatarTexto, textoDaAlternativa, recuperarRespostas };
