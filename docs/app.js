@@ -11,12 +11,19 @@ const chave = "caderno-pratica-v1";
 const banco = globalThis.BANCO || [];
 const indice = new Map(banco.map(q => [q.id, q]));
 const configInicial = () => ({ total: 20, preliminary: true, tree: [] });
-let state = { ...configInicial(), versao: 2, session: null, history: [] };
+let state = { ...configInicial(), versao: 2, session: null, history: [], provas: [] };
 try {
     const salvo = JSON.parse(localStorage.getItem(chave));
     state = { ...state, ...salvo, versao: 2, preliminary: salvo?.versao === 2 ? salvo.preliminary !== false : true };
 } catch {}
+if (state.session && !state.session.answers) {
+    state.session.answers = recuperarRespostas(state.session, state.history);
+    if (state.session.answers.length === state.session.ids.length) arquivar(state.session);
+}
 let aba = "build";
+let consulta = null;
+let revisando = null;
+let pedidoPDF = null;
 let materiasAbertas = Boolean(state.tree.length);
 let gabaritosAbertos = false;
 const temasAbertos = new WeakMap();
@@ -52,11 +59,13 @@ function salvar() {
 }
 
 function pendente() {
-    return state.session && state.session.position < state.session.ids.length;
+    return state.session && state.session.answers.length < state.session.ids.length;
 }
 
 function abrir(destino) {
     aba = destino;
+    consulta = null;
+    revisando = null;
     avisar();
     render("page-title");
 }
@@ -103,13 +112,20 @@ function iniciar(questoes) {
     if (!questoes.length) return;
     function comecar() {
         state.session = {
-            ids: questoes.map(q => q.id), position: 0, selected: null, cut: [], done: false, hits: 0
+            ids: questoes.map(q => q.id), position: 0, selected: null, cut: [], done: false, hits: 0, answers: []
         };
         salvar();
         abrir("quiz");
     }
     if (pendente()) confirmarMudanca("Substituir a prova em andamento?", "Iniciar nova prova", comecar);
     else comecar();
+}
+
+function arquivar(run) {
+    if (run.finishedAt) return;
+    run.finishedAt = Date.now();
+    const { ids, answers, hits, finishedAt } = run;
+    state.provas.push({ ids, answers, hits, finishedAt });
 }
 
 function confirmarMudanca(titulo, acao, concluir) {
@@ -309,15 +325,29 @@ function renderTemas(container, items, nivel, pool, caminho, linhas, atualizar) 
     }
 }
 
-function acoesDaProva(run) {
-    const pdf = botao("Exportar PDF", () => window.print());
-    pdf.disabled = run.ids.some(id => !indice.has(id));
+function botaoPDF(run, relatorio) {
+    const pdf = botao(relatorio ? "PDF da tentativa" : "PDF da prova", () => {
+        pedidoPDF = { run, relatorio };
+        window.print();
+    });
+    pdf.disabled = run.ids.some(id => !indice.has(id)) || (relatorio && !run.answers.length && !run.selected);
     pdf.title = "Selecione Salvar como PDF na janela de impressão.";
-    return [pdf, botao("Limpar prova", limparProva, "button quiet")];
+    return pdf;
+}
+
+function acoesDaProva(run) {
+    return [botaoPDF(run, false), botaoPDF(run, true), consulta
+        ? botao("Voltar ao histórico", () => abrir("history"), "button quiet")
+        : botao("Limpar prova", limparProva, "button quiet")];
+}
+
+function verQuestao(posicao) {
+    revisando = posicao;
+    render("page-title");
 }
 
 function renderProva() {
-    const run = state.session;
+    const run = consulta || state.session;
     if (!run) {
         cabecalho("Minha prova");
         const vazio = el("section", "card empty");
@@ -327,20 +357,27 @@ function renderProva() {
         main.append(vazio);
         return;
     }
-    if (run.position >= run.ids.length) {
+    const posicao = revisando ?? run.position ?? run.ids.length;
+    if (posicao >= run.ids.length) {
         renderResultado(run);
         return;
     }
-    const questao = indice.get(run.ids[run.position]);
+    const questao = indice.get(run.ids[posicao]);
     if (!questao) {
         cabecalho("Minha prova", "Esta questão não está disponível no banco atual.", acoesDaProva(run));
         main.append(botao("Montar nova prova", () => abrir("build"), "button primary"));
         return;
     }
 
-    cabecalho("Questão " + (run.position + 1) + " de " + run.ids.length, questao.tags.join(" › "), acoesDaProva(run));
+    const revisao = revisando !== null && (consulta || posicao < run.position);
+    const registro = run.answers[posicao];
+    const encerrada = Boolean(revisao || run.done);
+    const selecionada = () => encerrada ? registro?.choice : run.selected;
+    const descartadas = () => encerrada ? registro?.cut ?? [] : run.cut;
+    const chaveCorreta = registro?.key ?? questao.answer;
+    cabecalho("Questão " + (posicao + 1) + " de " + run.ids.length, questao.tags.join(" › "), acoesDaProva(run));
     const progresso = el("div", "progress");
-    const respondidas = run.position + Number(run.done);
+    const respondidas = run.answers.length;
     const barra = el("progress");
     barra.max = run.ids.length;
     barra.value = respondidas;
@@ -355,7 +392,7 @@ function renderProva() {
         const linha = el("div", "option");
         const answer = el("label", "answer");
         const radio = el("input", "sr-only");
-        Object.assign(radio, { type: "radio", name: "answer", value: letra, disabled: run.done });
+        Object.assign(radio, { type: "radio", name: "answer", value: letra, disabled: encerrada });
         radio.onchange = () => {
             if (run.done) return;
             run.selected = letra;
@@ -364,14 +401,14 @@ function renderProva() {
         };
         const corpo = el("span", "answer-body");
         const status = el("span", "answer-status");
-        corpo.append(el("span", "reading answer-text", formatarTexto(texto)), status);
+        corpo.append(el("span", "reading answer-text", textoDaAlternativa(texto, i)), status);
         answer.append(radio, el("span", "answer-letter", letra), corpo);
         const tesoura = botao("✂", () => {
             run.cut = run.cut.includes(letra) ? run.cut.filter(l => l !== letra) : [...run.cut, letra];
             salvar();
             atualizarOpcoes();
         }, "button icon cut-button");
-        tesoura.disabled = run.done;
+        tesoura.disabled = encerrada;
         linha.append(answer, tesoura);
         grupo.append(linha);
         return { letra, linha, radio, status, tesoura };
@@ -381,38 +418,51 @@ function renderProva() {
         run.done = true;
         const correta = run.selected === questao.answer;
         run.hits += Number(correta);
-        state.history.push({ id: questao.id, correct: correta, tags: questao.tags, at: Date.now() });
+        run.answers[posicao] = { choice: run.selected, correct: correta, key: questao.answer, status: questao.status, cut: run.cut };
+        state.history.push({ id: questao.id, choice: run.selected, correct: correta, tags: questao.tags, at: Date.now() });
+        if (run.answers.length === run.ids.length) arquivar(run);
         salvar();
         render("correcao");
     }, "button primary");
     atualizarOpcoes();
     card.append(grupo);
-    if (run.done) {
-        const correta = run.selected === questao.answer;
-        const feedback = el("section", "feedback " + (correta ? "success" : "failure"));
-        const titulo = el("h2", "", correta ? "Resposta correta" : "Resposta incorreta");
+    const navegacao = el("div", "actions question-nav");
+    if (posicao > 0) navegacao.append(botao("Questão anterior", () => verQuestao(posicao - 1)));
+    if (encerrada) {
+        const correta = registro?.correct;
+        const feedback = el("section", "feedback" + (correta === undefined ? "" : correta ? " success" : " failure"));
+        const titulo = el("h2", "", correta === undefined ? "Resposta antiga" : correta ? "Resposta correta" : "Resposta incorreta");
         titulo.id = "correcao";
         titulo.tabIndex = -1;
-        feedback.append(titulo, el("p", "", "Gabarito: " + questao.answer +
-            (questao.status === "preliminar" ? " · preliminar" : " · definitivo")));
+        feedback.append(titulo, el("p", "", "Gabarito " + chaveCorreta +
+            ((registro?.status ?? questao.status) === "preliminar" ? " · preliminar" : " · definitivo")));
+        if (!registro?.choice) feedback.append(el("p", "", "A letra marcada não foi registrada na versão anterior."));
         if (questao.explanation) feedback.append(el("p", "reading", formatarTexto(questao.explanation)));
         if (typeof questao.source === "string" && /^https:\/\//i.test(questao.source)) {
             const fonte = link("Consultar gabarito oficial", questao.source);
             Object.assign(fonte, { target: "_blank", rel: "noopener noreferrer" });
             feedback.append(fonte);
         }
-        const ultima = run.position + 1 === run.ids.length;
-        card.append(feedback, botao(ultima ? "Ver resultado" : "Próxima questão", () => {
-            run.position++;
-            run.selected = null;
-            run.cut = [];
-            run.done = false;
-            salvar();
-            render("page-title");
+        const ultima = posicao + 1 === run.ids.length;
+        card.append(feedback);
+        navegacao.append(botao(ultima ? "Ver resultado" : "Próxima questão", () => {
+            if (revisao) {
+                verQuestao(!consulta && posicao + 1 === run.position ? null : posicao + 1);
+            } else {
+                run.position++;
+                run.selected = null;
+                run.cut = [];
+                run.done = false;
+                salvar();
+                verQuestao(null);
+            }
         }, "button primary"));
     } else {
-        card.append(confirmar);
+        navegacao.append(confirmar);
     }
+    if (revisao) navegacao.append(botao(consulta || run.position >= run.ids.length ? "Voltar ao resultado" : "Voltar à questão atual",
+        () => verQuestao(null), "button quiet"));
+    card.append(navegacao);
     const leitura = el("div", "quiz");
     leitura.append(progresso, card);
     main.append(leitura);
@@ -420,16 +470,16 @@ function renderProva() {
     function atualizarOpcoes() {
         confirmar.disabled = !run.selected;
         for (const { letra, linha, radio, status, tesoura } of opcoes) {
-            const selecionada = letra === run.selected;
-            const descartada = run.cut.includes(letra);
-            const correta = run.done && letra === questao.answer;
-            radio.checked = selecionada;
-            linha.classList.toggle("selected", selecionada && !run.done);
+            const marcada = letra === selecionada();
+            const descartada = descartadas().includes(letra);
+            const correta = encerrada && letra === chaveCorreta;
+            radio.checked = marcada;
+            linha.classList.toggle("selected", marcada && !encerrada);
             linha.classList.toggle("discarded", descartada);
             linha.classList.toggle("correct", correta);
-            linha.classList.toggle("incorrect", run.done && selecionada && !correta);
-            status.textContent = correta ? (selecionada ? "Sua resposta · correta" : "Resposta correta") :
-                run.done && selecionada ? "Sua resposta · incorreta" : "";
+            linha.classList.toggle("incorrect", encerrada && marcada && !correta);
+            status.textContent = correta ? (marcada ? "Sua resposta · correta" : "Resposta correta") :
+                encerrada && marcada ? "Sua resposta · incorreta" : "";
             tesoura.setAttribute("aria-label", (descartada ? "Restaurar alternativa " : "Descartar alternativa ") + letra);
             tesoura.setAttribute("aria-pressed", String(descartada));
             tesoura.title = descartada ? "Restaurar alternativa" : "Descartar alternativa";
@@ -437,7 +487,7 @@ function renderProva() {
     }
 }
 
-function listarDisciplinas(registros, card) {
+function agruparDisciplinas(registros) {
     const grupos = new Map();
     for (const registro of registros) {
         const nome = registro.tags[0];
@@ -446,8 +496,12 @@ function listarDisciplinas(registros, card) {
         grupo.acertos += Number(registro.correct);
         grupos.set(nome, grupo);
     }
+    return grupos;
+}
+
+function listarDisciplinas(registros, card) {
     const lista = el("ul", "scores");
-    for (const [nome, grupo] of grupos) {
+    for (const [nome, grupo] of agruparDisciplinas(registros)) {
         const linha = el("li");
         const barra = el("progress");
         barra.max = grupo.total;
@@ -459,17 +513,27 @@ function listarDisciplinas(registros, card) {
     card.append(el("h2", "", "Por matéria"), lista);
 }
 
+function registrosDaProva(run) {
+    return run.answers.flatMap((item, i) => {
+        const questao = indice.get(run.ids[i]);
+        return item && questao ? [{ correct: item.correct, tags: questao.tags, questao }] : [];
+    });
+}
+
 function renderResultado(run) {
-    cabecalho("Prova concluída", "Veja como foi e refaça as questões que errou.", acoesDaProva(run));
-    const ultimas = state.history.slice(-run.ids.length);
-    const registros = ultimas.length === run.ids.length && ultimas.every((item, i) => item.id === run.ids[i]) ? ultimas : [];
-    const erros = registros.filter(item => !item.correct).map(item => indice.get(item.id)).filter(Boolean);
+    cabecalho("Prova concluída", "Confira o desempenho, reveja as respostas ou refaça a prova.", acoesDaProva(run));
+    const registros = registrosDaProva(run);
+    const erros = registros.filter(item => !item.correct).map(item => item.questao);
     const resultado = el("section", "card outcome");
     resultado.append(el("h2", "", "Você acertou " + run.hits + " de " + run.ids.length +
         (run.ids.length === 1 ? " questão" : " questões")));
     const acoes = el("div", "actions");
     if (erros.length) acoes.append(botao("Revisar " + erros.length + (erros.length === 1 ? " erro" : " erros"),
         () => iniciar(erros), "button primary"));
+    acoes.append(botao("Rever respostas", () => verQuestao(0)));
+    const refazer = botao("Refazer prova", () => iniciar(run.ids.map(id => indice.get(id))));
+    refazer.disabled = run.ids.some(id => !indice.has(id));
+    acoes.append(refazer);
     acoes.append(botao("Montar outra prova", () => abrir("build"), erros.length ? "button" : "button primary"));
     resultado.append(acoes);
     main.append(resultado);
@@ -481,10 +545,27 @@ function renderResultado(run) {
 }
 
 function renderHistorico() {
-    cabecalho("Histórico e revisão", "Acompanhe suas respostas e refaça as questões pendentes. Seu progresso fica salvo neste navegador.");
+    cabecalho("Histórico e revisão", "Veja suas provas completas e suas respostas por questão. O histórico fica salvo neste navegador.");
+    const provas = el("section", "card report");
+    provas.append(el("h2", "", "Provas concluídas"));
+    if (!state.provas.length) provas.append(el("p", "muted", "As próximas provas concluídas vão aparecer aqui."));
+    for (const prova of state.provas.slice().reverse()) {
+        const linha = el("div", "saved-exam");
+        const texto = el("div");
+        texto.append(el("strong", "", prova.ids.length + (prova.ids.length === 1 ? " questão" : " questões")),
+            el("p", "hint", new Date(prova.finishedAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) +
+                " · " + prova.hits + " de " + prova.ids.length + " certas"));
+        linha.append(texto, botao("Ver tentativa", () => {
+            aba = "quiz";
+            consulta = prova;
+            verQuestao(null);
+        }));
+        provas.append(linha);
+    }
+    main.append(provas);
     const registros = state.history;
     if (!registros.length) {
-        const vazio = el("section", "card empty");
+        const vazio = el("section", "card empty report");
         vazio.append(el("h2", "", "Ainda não há respostas"),
             el("p", "muted", "Depois da primeira questão, seus acertos e erros aparecem aqui."),
             botao("Montar prova", () => abrir("build"), "button primary"));
@@ -551,25 +632,70 @@ fileInput.onchange = async () => {
 
 window.addEventListener("beforeprint", () => {
     printout.replaceChildren();
-    const run = state.session;
+    const { run, relatorio } = pedidoPDF ?? { run: consulta || state.session, relatorio: false };
     if (!run || run.ids.some(id => !indice.has(id))) return;
     const topo = el("header", "print-header");
     topo.append(el("p", "", "1ª fase da OAB"), el("h1", "", "Estudos da Gabia"),
-        el("p", "", run.ids.length + (run.ids.length === 1 ? " questão" : " questões")),
-        el("p", "print-fields", "Nome: ___________________________________     Data: ____/____/______"));
+        el("p", "", (relatorio ? "Relatório da tentativa · " : "Caderno de questões · ") + run.ids.length +
+            (run.ids.length === 1 ? " questão" : " questões")));
+    if (!relatorio) topo.append(el("p", "print-fields", "Nome: ___________________________________     Data: ____/____/______"));
     printout.append(topo);
+    if (relatorio) {
+        const resumo = el("section", "print-summary");
+        const confirmadas = run.answers.length;
+        resumo.append(el("h2", "", "Desempenho"),
+            el("p", "", "Respondidas " + confirmadas + " de " + run.ids.length + " · Acertos " + run.hits +
+                " · Erros " + (confirmadas - run.hits) + " · Em branco " + (run.ids.length - confirmadas)),
+            el("p", "", "Aproveitamento nas confirmadas " + (confirmadas
+                ? Math.round(100 * run.hits / confirmadas) + "%" : "—")));
+        if (run.finishedAt) resumo.append(el("p", "", "Concluída em " +
+            new Date(run.finishedAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })));
+        const materias = agruparDisciplinas(registrosDaProva(run));
+        if (materias.size) {
+            const lista = el("ul");
+            for (const [nome, grupo] of materias) lista.append(el("li", "", nome + " · " + grupo.acertos + " de " + grupo.total + " certas"));
+            resumo.append(el("h3", "", "Por matéria"), lista);
+        }
+        printout.append(resumo);
+    }
     run.ids.forEach((id, i) => {
         const q = indice.get(id);
         const item = el("article", "print-question");
-        item.append(el("h2", "", "Questão " + (i + 1)), el("p", "reading", formatarTexto(q.stem)));
+        const inicio = el("div", "print-prompt");
+        inicio.append(el("h2", "", "Questão " + (i + 1)));
+        const registro = run.answers[i];
+        if (relatorio) {
+            const anotacao = registro
+                ? (registro.correct ? "Acerto" : "Erro") + " · Marcada " + (registro.choice ?? "não registrada") +
+                    " · Gabarito " + (registro.key ?? q.answer) +
+                    ((registro.status ?? q.status) === "preliminar" ? " (preliminar)" : "")
+                : i < run.answers.length ? "Resposta antiga sem detalhes"
+                : i === run.position && run.selected ? "Marcada " + run.selected + " · sem confirmar" : "Em branco";
+            inicio.append(el("p", "print-status", anotacao));
+        }
+        inicio.append(el("p", "reading", formatarTexto(q.stem)));
+        item.append(inicio);
         const opcoes = el("ol");
-        for (const texto of q.choices) opcoes.append(el("li", "reading", formatarTexto(texto)));
+        q.choices.forEach((texto, pos) => {
+            const letra = letras[pos];
+            const opcao = el("li", "reading", textoDaAlternativa(texto, pos));
+            if (relatorio && registro) {
+                const marcada = letra === registro.choice;
+                const certa = letra === (registro.key ?? q.answer);
+                if (marcada || certa) {
+                    opcao.classList.add("print-marked");
+                    opcao.append(el("strong", "", marcada && certa ? " [Marcada e correta]" : marcada ? " [Marcada]" : " [Correta]"));
+                }
+            }
+            opcoes.append(opcao);
+        });
         item.append(opcoes);
         printout.append(item);
     });
     document.body.classList.add("print-ready");
 });
 window.addEventListener("afterprint", () => {
+    pedidoPDF = null;
     document.body.classList.remove("print-ready");
     printout.replaceChildren();
 });
