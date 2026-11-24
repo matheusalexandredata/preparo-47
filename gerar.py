@@ -56,6 +56,29 @@ for block in re.split(r"(?m)^### Questão \d+ — [^\n]+\n",
 assert len(seen) == len(classification) == len(answers) and seen == answers.keys()
 assert all(canonical in seen for _, canonical in classification.values())
 assert len(bank) == len({q["id"] for q in bank})
+
+arvore = {}
+for questao in bank:
+    nivel = arvore
+    campo = "definitivas" if questao["status"] == "confirmada" else "preliminares"
+    for nome in questao["tags"]:
+        tema = nivel.setdefault(nome, {"definitivas": 0, "preliminares": 0, "filhos": {}})
+        tema[campo] += 1
+        nivel = tema["filhos"]
+
+
+def serializar_temas(nivel):
+    return [
+        {"nome": nome, "definitivas": tema["definitivas"], "preliminares": tema["preliminares"],
+         **({"filhos": serializar_temas(tema["filhos"])} if tema["filhos"] else {})}
+        for nome, tema in sorted(nivel.items(), key=lambda par: par[0].casefold())
+    ]
+
+
+catalogo = {"versao": 1, "temas": serializar_temas(arvore)}
+(repo / "docs" / "temas.json").write_text(
+    json.dumps(catalogo, ensure_ascii=False, separators=(",", ":")) + "\n", encoding="utf-8"
+)
 payload = json.dumps(bank, ensure_ascii=False, separators=(",", ":"))
 (repo / "docs" / "banco.js").write_text("globalThis.BANCO=" + payload + ";\n", encoding="utf-8")
 (repo / "banco.json").write_text(payload + "\n", encoding="utf-8")
