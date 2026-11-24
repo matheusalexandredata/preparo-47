@@ -123,6 +123,13 @@ function renderWeights(container, items, depth, pool) {
         save(); render();
     }, "secondary small"));
 }
+function readingText(text) {
+    // PDF extraction inserts hard wraps. Keep paragraphs and numbered items.
+    return text.trim().replace(/\r\n?/g, "\n").split(/\n(?:[ \t]*\n)+/).map(paragraph =>
+        paragraph.replace(/[ \t]*\n[ \t]*(?![ \t]|(?:[IVXLCDM]+|\d+)\s*[.)–-]\s|[•–—]\s)/g, " ")
+    ).join("\n\n");
+}
+
 function renderQuiz() {
     const run = state.session;
     if (!run) {
@@ -145,8 +152,8 @@ function renderQuiz() {
     progress.max = run.ids.length;
     progress.value = run.position + Number(run.done);
     progress.setAttribute("aria-label", "Questões respondidas");
-    const card = node("section", undefined, "card");
-    card.append(node("p", q.stem, "stem"));
+    const card = node("section", undefined, "card quiz-card");
+    card.append(node("p", readingText(q.stem), "stem"));
     for (const [i, choice] of q.choices.entries()) {
         const letter = letters[i];
         const line = node("div", undefined, "option");
@@ -154,7 +161,8 @@ function renderQuiz() {
         line.classList.toggle("selected", run.selected === letter);
         line.classList.toggle("right", run.done && letter === q.answer);
         line.classList.toggle("wrong", run.done && letter === run.selected && letter !== q.answer);
-        const answer = button(letter + "  " + choice, () => { run.selected = letter; save(); render(); }, "answer");
+        const answer = button("", () => { run.selected = letter; save(); render(); }, "answer");
+        answer.append(node("span", letter, "answer-letter"), node("span", readingText(choice), "answer-text"));
         answer.disabled = run.done;
         answer.setAttribute("aria-pressed", run.selected === letter);
         const cut = button("✂", () => {
@@ -171,14 +179,15 @@ function renderQuiz() {
         const feedback = node("div", undefined, "feedback");
         feedback.append(node("strong", run.selected === q.answer ? "Resposta correta" : "Resposta incorreta"),
             node("p", "Gabarito " + q.answer + (q.status === "preliminar" ? " · preliminar" : " · definitivo")));
-        if (q.explanation) feedback.append(node("p", q.explanation, "stem"));
+        if (q.explanation) feedback.append(node("p", readingText(q.explanation), "stem"));
         const url = q.source;
         if (typeof url === "string" && /^https:\/\//i.test(url)) {
             const link = node("a", "Consultar gabarito");
             Object.assign(link, { href: url, target: "_blank", rel: "noopener noreferrer" });
             feedback.append(link);
         }
-        card.append(feedback, button("Próxima questão →", () => {
+        const nextLabel = run.position + 1 === run.ids.length ? "Ver resultado →" : "Próxima questão →";
+        card.append(feedback, button(nextLabel, () => {
             run.position++; run.selected = null; run.cut = []; run.done = false; save(); render();
         }, "primary"));
     } else {
